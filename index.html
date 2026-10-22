@@ -55,15 +55,14 @@
                 <input type="text" id="jabatan" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50" placeholder="Contoh: Guru / Kepala Sekolah / Staf">
             </div>
 
-            <!-- Kamera Depan Direct View -->
+            <!-- Foto hanya dibuka setelah tombol diklik; foto belum dikirim sampai form disubmit -->
             <div class="space-y-2 pt-1">
-                <label class="block text-xs font-semibold uppercase text-slate-500">Ambil Foto (Kamera Depan)</label>
-                <div class="relative rounded-xl overflow-hidden bg-slate-900 aspect-4/3 flex items-center justify-center border border-slate-200 shadow-inner">
-                    <video id="video" autoplay playsinline class="w-full h-full object-cover transform -scale-x-100"></video>
-                    <canvas id="canvas" class="hidden"></canvas>
-                    <img id="photoPreview" class="hidden w-full h-full object-cover transform -scale-x-100 absolute inset-0">
-                    <button type="button" onclick="capturePhoto()" id="captureBtn" class="absolute bottom-3 bg-white/90 hover:bg-white text-slate-800 font-medium px-4 py-2 rounded-full text-xs shadow-lg backdrop-blur transition active:scale-95">Ambil Foto</button>
-                    <button type="button" onclick="retakePhoto()" id="retakeBtn" class="hidden absolute bottom-3 bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2 rounded-full text-xs shadow-lg transition active:scale-95">Ulangi Foto</button>
+                <label class="block text-xs font-semibold uppercase text-slate-500">Foto Kehadiran (Wajib)</label>
+                <div id="photoPlaceholder" class="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center text-sm text-slate-500">Foto belum diambil</div>
+                <img id="photoPreview" alt="Pratinjau foto kehadiran" class="hidden w-full max-h-72 object-contain rounded-xl border border-slate-200 bg-slate-100">
+                <div class="flex gap-2">
+                    <button type="button" onclick="openCamera()" id="openCameraBtn" class="flex-1 py-3 rounded-xl bg-slate-800 text-white text-sm font-semibold">📷 Ambil Foto</button>
+                    <button type="button" onclick="removePhoto()" id="removePhotoBtn" class="hidden px-4 py-3 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold">Hapus Foto</button>
                 </div>
             </div>
 
@@ -83,6 +82,21 @@
         Aplikasi Absensi Netlify &copy; 2026
     </footer>
 
+    <!-- Popup kamera -->
+    <div id="cameraModal" class="notice-backdrop" role="dialog" aria-modal="true" aria-labelledby="cameraTitle" onclick="if(event.target===this) closeCamera()">
+        <div class="notice-card" style="max-width:420px">
+            <h3 id="cameraTitle" class="text-lg font-bold text-slate-900 mb-3">Ambil Foto Kehadiran</h3>
+            <div class="rounded-xl overflow-hidden bg-slate-900 aspect-4/3 flex items-center justify-center">
+                <video id="video" autoplay playsinline class="w-full h-full object-cover" style="transform:scaleX(-1)"></video>
+                <canvas id="canvas" class="hidden"></canvas>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button type="button" onclick="closeCamera()" class="flex-1 py-3 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold">Batal</button>
+                <button type="button" onclick="capturePhoto()" id="captureBtn" class="flex-1 py-3 rounded-xl bg-blue-600 text-white text-sm font-semibold">Ambil Foto</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Notifikasi modern pengganti alert bawaan browser -->
     <div id="noticeModal" class="notice-backdrop" role="dialog" aria-modal="true" aria-labelledby="noticeTitle" aria-describedby="noticeMessage" onclick="if(event.target===this) closeNotification()">
         <div class="notice-card">
@@ -91,7 +105,7 @@
             </div>
             <h3 id="noticeTitle" class="text-xl font-bold text-slate-900">Berhasil!</h3>
             <p id="noticeMessage" class="text-sm leading-6 text-slate-500 mt-2 mb-6">Absensi Anda berhasil dikirim.</p>
-            <button type="button" class="notice-action" onclick="closeNotification()">Oke</button>
+            <button type="button" class="notice-action" onclick="closeNotification()">Mengerti</button>
         </div>
     </div>
 
@@ -105,55 +119,70 @@
         window.onload = function() {
             loadMasterData();
             updateIdentityLabel();
-            startCamera();
             getGPS();
         };
 
-        async function startCamera() {
+        async function openCamera() {
+            const modal = document.getElementById('cameraModal');
+            modal.classList.add('show');
+            document.body.style.overflow = 'hidden';
             try {
-                streamObj = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } }, 
-                    audio: false 
-                });
-                document.getElementById('video').srcObject = streamObj;
-                document.getElementById('video').classList.remove('hidden');
-                document.getElementById('photoPreview').classList.add('hidden');
-                document.getElementById('captureBtn').classList.remove('hidden');
-                document.getElementById('retakeBtn').classList.add('hidden');
-                capturedPhotoBase64 = null;
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('Kamera tidak didukung atau halaman tidak menggunakan HTTPS.');
+                stopCamera();
+                streamObj = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 720 }, height: { ideal: 720 } }, audio: false });
+                const video = document.getElementById('video');
+                video.srcObject = streamObj;
+                await video.play();
             } catch (err) {
-                showNotification("Gagal mengakses kamera depan. Pastikan izin kamera telah diizinkan.", "error");
+                closeCamera();
+                showNotification('Kamera tidak dapat dibuka. Pastikan menggunakan HTTPS dan izinkan akses kamera pada browser.', 'error');
             }
         }
 
         function stopCamera() {
             if (streamObj) {
                 streamObj.getTracks().forEach(track => track.stop());
+                streamObj = null;
             }
+            const video = document.getElementById('video');
+            if (video) video.srcObject = null;
+        }
+
+        function closeCamera() {
+            stopCamera();
+            document.getElementById('cameraModal').classList.remove('show');
+            document.body.style.overflow = '';
         }
 
         function capturePhoto() {
             const video = document.getElementById('video');
+            if (!video.videoWidth || !video.videoHeight) {
+                showNotification('Kamera belum siap. Tunggu sebentar lalu coba kembali.', 'info');
+                return;
+            }
             const canvas = document.getElementById('canvas');
-            const photoPreview = document.getElementById('photoPreview');
-            
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             const ctx = canvas.getContext('2d');
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
             ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            
             capturedPhotoBase64 = canvas.toDataURL('image/jpeg', 0.8);
-            photoPreview.src = capturedPhotoBase64;
-            photoPreview.classList.remove('hidden');
-            video.classList.add('hidden');
-            
-            document.getElementById('captureBtn').classList.add('hidden');
-            document.getElementById('retakeBtn').classList.remove('hidden');
-            stopCamera();
+            const preview = document.getElementById('photoPreview');
+            preview.src = capturedPhotoBase64;
+            preview.classList.remove('hidden');
+            document.getElementById('photoPlaceholder').classList.add('hidden');
+            document.getElementById('removePhotoBtn').classList.remove('hidden');
+            closeCamera();
         }
 
-        function retakePhoto() {
-            startCamera();
+        function removePhoto() {
+            capturedPhotoBase64 = null;
+            const preview = document.getElementById('photoPreview');
+            preview.removeAttribute('src');
+            preview.classList.add('hidden');
+            document.getElementById('photoPlaceholder').classList.remove('hidden');
+            document.getElementById('removePhotoBtn').classList.add('hidden');
         }
 
         function getGPS() {
@@ -228,6 +257,18 @@
 
         async function submitAttendance(e) {
             e.preventDefault();
+            const form = document.getElementById('attendanceForm');
+            if (!form.checkValidity()) {
+                form.reportValidity();
+                showNotification('Lengkapi semua kolom wajib sebelum mengirim absensi.', 'info');
+                return;
+            }
+            const identityNumber = document.getElementById('nip_nik').value.trim();
+            if (!/^\d+$/.test(identityNumber)) {
+                showNotification('Nomor NIP/NIK hanya boleh berisi angka.', 'info');
+                document.getElementById('nip_nik').focus();
+                return;
+            }
             if (!capturedPhotoBase64) {
                 showNotification("Silakan ambil foto selfie menggunakan kamera depan terlebih dahulu.", "info");
                 return;
@@ -279,7 +320,8 @@
                 showNotification(result.message || (berhasil ? "Absensi berhasil dikirim!" : "Absensi belum berhasil dikirim."), berhasil ? "success" : "error", berhasil ? "Absensi Terkirim!" : "Pengiriman Gagal");
                 if (!berhasil) return;
                 document.getElementById('attendanceForm').reset();
-                startCamera();
+                removePhoto();
+                updateIdentityLabel();
                 getGPS();
             } catch(err) {
                 showNotification("Terjadi kesalahan saat mengirim data absensi. Periksa koneksi internet lalu coba lagi.", "error");
@@ -317,7 +359,7 @@
         }
 
         document.addEventListener("keydown", function(event) {
-            if (event.key === "Escape") closeNotification();
+            if (event.key === "Escape") { closeNotification(); closeCamera(); }
         });
 
         function formatTanggal(str) {
