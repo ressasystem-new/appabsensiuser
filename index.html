@@ -25,14 +25,19 @@
                 <input type="text" id="nama" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50" placeholder="Masukkan nama lengkap">
             </div>
             <div>
-                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">NIP / NIK</label>
-                <input type="text" id="nip_nik" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50" placeholder="Nomor NIP atau NIK (jika tidak ada NIP)">
+                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Jenis Identitas</label>
+                <select id="jenisIdentitas" required onchange="updateIdentityLabel()" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50">
+                    <option value="NIP">NIP (Nomor Induk Pegawai)</option>
+                    <option value="NIK">NIK (Nomor Induk Kependudukan)</option>
+                </select>
+                <label id="identityLabel" for="nip_nik" class="block text-xs font-semibold uppercase text-slate-500 mb-1 mt-3">Nomor NIP</label>
+                <input type="text" id="nip_nik" required inputmode="numeric" autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50" placeholder="Masukkan nomor NIP">
             </div>
             <div>
-                <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Asal Sekolah / Instansi</label>
-                <select id="instansi" required class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50">
-                    <option value="">Memuat daftar instansi...</option>
-                </select>
+                <label for="instansi" class="block text-xs font-semibold uppercase text-slate-500 mb-1">Asal Sekolah / Instansi</label>
+                <input type="text" id="instansi" list="instansiOptions" required autocomplete="off" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:outline-none text-sm bg-slate-50/50" placeholder="Ketik nama sekolah / instansi...">
+                <datalist id="instansiOptions"><option value="">Memuat daftar instansi...</option></datalist>
+                <p class="text-[11px] text-slate-500 mt-1">Ketik beberapa huruf, lalu pilih nama yang sesuai dari daftar saran.</p>
             </div>
             <div>
                 <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Jabatan</label>
@@ -51,11 +56,11 @@
                 </div>
             </div>
 
-            <div>
+            <div class="hidden" aria-hidden="true">
                 <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Koordinat GPS (Otomatis)</label>
                 <div class="flex items-center space-x-2">
-                    <input type="text" id="gps" readonly required class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-xs text-slate-600 font-mono" placeholder="Mendeteksi lokasi GPS...">
-                    <button type="button" onclick="getGPS()" class="px-3 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-semibold shrink-0 transition">Refresh</button>
+                    <input type="text" id="gps" readonly required tabindex="-1" class="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-100 text-xs text-slate-600 font-mono" placeholder="Mendeteksi lokasi GPS...">
+                    <button type="button" onclick="getGPS()" tabindex="-1" class="px-3 py-2.5 bg-slate-200 hover:bg-slate-300 rounded-xl text-xs font-semibold shrink-0 transition">Refresh</button>
                 </div>
             </div>
 
@@ -76,6 +81,7 @@
 
         window.onload = function() {
             loadMasterData();
+            updateIdentityLabel();
             startCamera();
             getGPS();
         };
@@ -145,6 +151,13 @@
             }
         }
 
+        function updateIdentityLabel() {
+            const jenis = document.getElementById('jenisIdentitas').value;
+            document.getElementById('identityLabel').textContent = 'Nomor ' + jenis;
+            document.getElementById('nip_nik').placeholder = 'Masukkan nomor ' + jenis;
+            document.getElementById('nip_nik').setAttribute('aria-label', 'Nomor ' + jenis);
+        }
+
         async function loadMasterData() {
             if (
                 !WEB_APP_URL ||
@@ -170,16 +183,21 @@
                     document.getElementById('activeEventDates').innerText = "Silakan atur kegiatan pada Portal Master Admin";
                 }
                 
-                let select = document.getElementById('instansi');
-                select.innerHTML = '<option value="">Pilih Instansi / Sekolah</option>';
+                const options = document.getElementById('instansiOptions');
+                options.innerHTML = '';
+                window.instansiValidList = [];
                 if (data.instansiList && Array.isArray(data.instansiList)) {
-                    data.instansiList.forEach(item => {
-                        let opt = document.createElement('option');
-                        opt.value = item.trim();
-                        opt.innerHTML = item.trim();
-                        select.appendChild(opt);
+                    const uniqueInstansi = [...new Set(data.instansiList.map(item => String(item).trim()).filter(Boolean))];
+                    window.instansiValidList = uniqueInstansi;
+                    uniqueInstansi.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item;
+                        options.appendChild(opt);
                     });
                 }
+                document.getElementById('instansi').placeholder = window.instansiValidList.length
+                    ? 'Ketik nama sekolah / instansi...'
+                    : 'Daftar instansi belum tersedia';
             } catch(e) {
                 document.getElementById('activeEventName').innerText = "Gagal Memuat Kegiatan Aktif";
             }
@@ -197,6 +215,20 @@
                 return;
             }
 
+            const instansiDipilih = document.getElementById('instansi').value.trim();
+            const daftarInstansi = window.instansiValidList || [];
+            const cocok = daftarInstansi.find(item => item.toLocaleLowerCase('id-ID') === instansiDipilih.toLocaleLowerCase('id-ID'));
+            if (!cocok) {
+                alert("Silakan ketik lalu pilih Asal Sekolah / Instansi yang tersedia pada daftar saran.");
+                document.getElementById('instansi').focus();
+                return;
+            }
+            if (!document.getElementById('gps').value || /Mencari|Gagal|tidak didukung/i.test(document.getElementById('gps').value)) {
+                alert("Koordinat GPS belum berhasil dideteksi. Aktifkan izin lokasi lalu coba lagi.");
+                getGPS();
+                return;
+            }
+
             const submitBtn = document.getElementById('submitBtn');
             submitBtn.disabled = true;
             submitBtn.innerText = "Mengirim Absensi...";
@@ -207,7 +239,7 @@
                 tglKegiatan: `${currentKegiatanInfo.tglMulai} s/d ${currentKegiatanInfo.tglSelesai}`,
                 nama: document.getElementById('nama').value,
                 nip_nik: document.getElementById('nip_nik').value,
-                instansi: document.getElementById('instansi').value,
+                instansi: cocok,
                 jabatan: document.getElementById('jabatan').value,
                 gps: document.getElementById('gps').value,
                 photo: capturedPhotoBase64
