@@ -146,8 +146,14 @@
         }
 
         async function loadMasterData() {
-            if (WEB_APP_URL === "https://script.google.com/macros/s/AKfycbzide4QtkQXxVu7YNrppc9pD14ZucWkpIp1zQdzju-ILM0HjZV5J6y1rY5JKfCBibH4TA/exec" || !WEB_APP_URL) {
-                document.getElementById('activeEventName').innerText = "WEB_APP_URL Belum Diatur";
+            if (
+                !WEB_APP_URL ||
+                WEB_APP_URL.includes("https://script.google.com/macros/library/d/19FshnfYlUdlGWDOZ7sI5bCTvPz-Dp0aoY_RohEZZnodu0Xuyi1sKKu2f/4") ||
+                !WEB_APP_URL.startsWith("https://script.google.com/macros/s/") ||
+                !WEB_APP_URL.endsWith("/exec")
+            ) {
+                document.getElementById('activeEventName').innerText =
+                    "Konfigurasi URL Google Apps Script belum benar";
                 return;
             }
 
